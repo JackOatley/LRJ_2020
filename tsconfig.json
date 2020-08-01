@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "module": "AMD",
+		"target": "es5",
+        "noImplicitAny": true,
+        "removeComments": true,
+        "preserveConstEnums": true,
+        "outFile": "./bin/index.js",
+        "sourceMap": true,
+		"strictNullChecks": true
+    },
+    "include": [
+        "./src/**/*"
+    ]
+}
