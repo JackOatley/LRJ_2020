@@ -2,7 +2,7 @@ import { Texture } from './Texture';
 
 export const spriteSheet = new Texture('../img/bhts.png');
 
-export class Sprite {
+class Frame {
 
 	public texture: Texture;
 	public x: number;
@@ -18,12 +18,28 @@ export class Sprite {
 		this.h = h;
 	}
 
-	public draw(ctx: CanvasRenderingContext2D, x: number, y: number) {
-		this.texture.draw(
+}
+
+export class Sprite {
+
+	public texture: Texture;
+	public frames: Frame[];
+
+	constructor(texture: Texture, frames: Array<Array<number>>) {
+		this.texture = texture;
+		this.frames = [];
+		frames.forEach(f => {
+			this.frames.push(new Frame(texture, f[0], f[1], f[2], f[3]));
+		});
+	}
+
+	public draw(ctx: CanvasRenderingContext2D, i: number, x: number, y: number) {
+		const frame = this.frames[i];
+		frame.texture.draw(
 			ctx,
-			this.x,
-			this.y,
-			this.w, this.h, Math.round(x), Math.round(y), this.w, this.h
+			frame.x,
+			frame.y,
+			frame.w, frame.h, Math.round(x), Math.round(y), frame.w, frame.h
 		);
 	}
 

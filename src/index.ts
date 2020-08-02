@@ -5,11 +5,25 @@ import { Tile } from './Tile';
 import { TILE, TileInterface } from './TileInterface';
 import { Sprite, spriteSheet } from './Sprite';
 import { Map, LoadMapCallbackArgs } from './Map';
+import { Mob } from './Mob';
 
-const cursor = new Sprite(spriteSheet, 7*8, 7*8, 8, 12);
+const cursor = new Sprite(spriteSheet, [[7*8, 7*8, 8, 12]]);
+const imp = {
+	name: "Imp",
+	sprite: new Sprite(spriteSheet, [
+		[9*8, 6*8, 8, 8],
+		[10*8, 6*8, 8, 8],
+		[11*8, 6*8, 8, 8],
+		[10*8, 6*8, 8, 8]
+	]),
+	hp: 4,
+	canDig: true
+}
+
+new Mob(imp, 30, 31);
 
 const horny = {
-	sprite: new Sprite(spriteSheet, 8*8, 6*8, 8, 12),
+	sprite: new Sprite(spriteSheet, [[8*8, 6*8, 8, 12]]),
 	x: 32,
 	y: 32
 }
@@ -49,6 +63,8 @@ requestAnimationFrame(function loop() {
 	const cy = Math.round(-camera.y * 8);
 	ctx.translate(cx + 32, cy + 32);
 
+	Mob.updateAll();
+
 	// draw map
 	for (let x = Math.max(0, ~~camera.x-4); x < Math.min(63, ~~camera.x+5); x++)
 	for (let y = Math.max(0, ~~camera.y-4); y < Math.min(63, ~~camera.y+5); y++) {
@@ -56,7 +72,8 @@ requestAnimationFrame(function loop() {
 	}
 
 	// draw actors
-	horny.sprite.draw(ctx, horny.x*8, horny.y*8);
+	Mob.drawAll(ctx);
+	horny.sprite.draw(ctx, 0, horny.x*8, horny.y*8);
 
 	// draw selector
 	const mX = ~~(mouse.x / 10 / 8 + camera.x - 4);
@@ -82,7 +99,7 @@ requestAnimationFrame(function loop() {
 	ctx.restore();
 
 	// draw cursor
-	cursor.draw(ctx, mouse.x/10, mouse.y/10);
+	cursor.draw(ctx, 0, mouse.x/10, mouse.y/10);
 
 	keyboard.update();
 	mouse.update();

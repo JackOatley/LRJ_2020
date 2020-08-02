@@ -3,8 +3,10 @@ import { TILE, TileInterface } from './TileInterface';
 
 export class Tile {
 
+	static id: number = 0;
 	static instances: Array<Tile> = [];
 
+	readonly id: number;
 	readonly x: number;
 	readonly y: number;
 	public sprite: Sprite;
@@ -14,16 +16,17 @@ export class Tile {
 	public selected: boolean = false;
 
 	constructor(i: TileInterface, x: number, y: number) {
+		this.id = Tile.id++;
 		this.x = x;
 		this.y = y;
 		this.interface = i;
-		this.sprite = new Sprite(spriteSheet, 0, 0, 8, 8);
+		this.sprite = new Sprite(spriteSheet, [[0, 0, 8, 8]]);
 		Tile.instances.push(this);
 	}
 
 	public draw(ctx: CanvasRenderingContext2D) {
 		if (this.sprite) {
-			this.sprite.draw(ctx, this.x*8, this.y*8);
+			this.sprite.draw(ctx, 0, this.x*8, this.y*8);
 			if (this.selected) {
 				ctx.fillStyle = "#FFFF00";
 				ctx.globalAlpha = 0.75 + Math.sin(performance.now() / 250) * 0.25;
@@ -105,7 +108,7 @@ export class Tile {
 
 		}
 
-		return new Sprite(spriteSheet, x, y, w, h);
+		return new Sprite(spriteSheet, [[x, y, w, h]]);
 
 	}
 
@@ -116,6 +119,86 @@ export class Tile {
 				return tile;
 		}
 		return null;
+	}
+
+	static pathTo(a: Tile, b: Tile): Array<Tile> | null {
+
+		const path = [];
+		const limit: number = 100;
+		const visited: Array<Tile | null> = [];
+		const next: Array<Tile | null> = [a];
+		const values: Array<number> = [];
+
+		let n = 0
+		let val = 0;
+		values[a.id] = 1;
+		while (next.length > 0) {
+			if (n++ >= limit) break;
+
+			//
+			const c = <Tile>next.shift();
+			visited.push(c);
+			if (c) {
+
+				if (c.interface.isHigh) {
+					values[c.id] = 1000000;
+				}
+
+				// get neighbours
+				else {
+
+					const v = values[c.id];
+
+					const n = Tile.findByPosition(c.x, c.y-1);
+					const s = Tile.findByPosition(c.x, c.y+1);
+					const e = Tile.findByPosition(c.x+1, c.y);
+					const w = Tile.findByPosition(c.x-1, c.y);
+
+					if (n && !visited.includes(n) && !next.includes(n)) { next.push(n); }
+					if (s && !visited.includes(s) && !next.includes(s)) { next.push(s); }
+					if (e && !visited.includes(e) && !next.includes(e)) { next.push(e); }
+					if (w && !visited.includes(w) && !next.includes(w)) { next.push(w); }
+					if (n) values[n.id] = Math.min(v+1, values[n.id] || 1000000);
+					if (s) values[s.id] = Math.min(v+1, values[s.id] || 1000000);
+					if (e) values[e.id] = Math.min(v+1, values[e.id] || 1000000);
+					if (w) values[w.id] = Math.min(v+1, values[w.id] || 1000000);
+
+					if ([n, s, e, w].includes(b)) {
+						let p = c;
+						const lim = 100;
+						let i = 0;
+						while (p !== a) {
+							path.push(p);
+							if (i++ >= lim) break;
+							const n = Tile.findByPosition(p.x, p.y-1);
+							const s = Tile.findByPosition(p.x, p.y+1);
+							const e = Tile.findByPosition(p.x+1, p.y);
+							const w = Tile.findByPosition(p.x-1, p.y);
+							if (n && values[n.id] !== undefined && values[n.id] < values[p.id]) {
+								p = n;
+							}
+							if (s && values[s.id] !== undefined && values[s.id] < values[p.id]){
+								p = s;
+							}
+							if (e && values[e.id] !== undefined && values[e.id] < values[p.id]) {
+								p = e;
+							}
+							if (w && values[w.id] !== undefined && values[w.id] < values[p.id]) {
+								p = w;
+							}
+						}
+						//console.log("done!", path.reverse());
+					}
+
+				}
+
+			}
+
+		}
+
+		path.reverse();
+		return path;
+
 	}
 
 }
