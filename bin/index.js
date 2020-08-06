@@ -121,7 +121,7 @@ define("Sprite", ["require", "exports", "Texture"], function (require, exports, 
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Sprite = exports.spriteSheet = void 0;
-    exports.spriteSheet = new Texture_1.Texture('../img/bhts.png');
+    exports.spriteSheet = new Texture_1.Texture('./img/bhts.png');
     class Frame {
         constructor(texture, x, y, w, h) {
             this.texture = texture;
@@ -140,7 +140,7 @@ define("Sprite", ["require", "exports", "Texture"], function (require, exports, 
             });
         }
         draw(ctx, i, x, y) {
-            const frame = this.frames[i];
+            const frame = this.frames[~~i % this.frames.length];
             frame.texture.draw(ctx, frame.x, frame.y, frame.w, frame.h, Math.round(x), Math.round(y), frame.w, frame.h);
         }
     }
@@ -151,8 +151,12 @@ define("TileInterface", ["require", "exports"], function (require, exports) {
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TILE = void 0;
     exports.TILE = {
-        NULL: { name: "NULL" },
-        GROUND: { name: "Ground", },
+        NULL: { name: "NULL", isHigh: true },
+        SPECIAL: { name: "SPECIAL" },
+        GROUND: { name: "Ground" },
+        FLOOR: { name: "Claimed Ground" },
+        LAIR: { name: "Lair" },
+        HATCHERY: { name: "Hatchery " },
         BEDROCK: { name: "Bedrock", hasFaces: true, isHigh: true },
         DIRT: { name: "Dirt", hasFaces: true, isHigh: true, minable: true },
         GOLD: { name: "Gold", hasFaces: true, isHigh: true, minable: true }
@@ -164,6 +168,7 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
     exports.Tile = void 0;
     class Tile {
         constructor(i, x, y) {
+            this.owner = 0;
             this.faces = 0b00000000;
             this.selected = false;
             this.id = Tile.id++;
@@ -173,15 +178,30 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
             this.sprite = new Sprite_1.Sprite(Sprite_1.spriteSheet, [[0, 0, 8, 8]]);
             Tile.instances.push(this);
         }
+        set(obj) {
+            if (obj.owner)
+                this.owner = obj.owner;
+            if (obj.interface)
+                this.interface = obj.interface;
+            if (obj.sprite)
+                this.sprite = obj.sprite;
+        }
         draw(ctx) {
+            if (this.interface === TileInterface_1.TILE.NULL) {
+                return;
+            }
+            if (this.owner) {
+                ctx.fillStyle = "#911A1A";
+                ctx.fillRect(this.x * 8, this.y * 8, 8, 8);
+            }
             if (this.sprite) {
-                this.sprite.draw(ctx, 0, this.x * 8, this.y * 8);
-                if (this.selected) {
-                    ctx.fillStyle = "#FFFF00";
-                    ctx.globalAlpha = 0.75 + Math.sin(performance.now() / 250) * 0.25;
-                    ctx.fillRect(this.x * 8, this.y * 8, 8, 8);
-                    ctx.globalAlpha = 1;
-                }
+                this.sprite.draw(ctx, performance.now() / 100, this.x * 8, this.y * 8);
+            }
+            if (this.selected) {
+                ctx.fillStyle = "#FFFF00";
+                ctx.globalAlpha = 0.75 + Math.sin(performance.now() / 250) * 0.25;
+                ctx.fillRect(this.x * 8, this.y * 8, 8, 8);
+                ctx.globalAlpha = 1;
             }
         }
         static tileFromColor(color) {
@@ -195,6 +215,8 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
             }
         }
         static spriteFromType(tile) {
+            if (tile.interface === TileInterface_1.TILE.SPECIAL)
+                return tile.sprite;
             let [x, y, w, h] = [0, 0, 8, 8];
             switch (tile.interface) {
                 case TileInterface_1.TILE.BEDROCK:
@@ -203,11 +225,20 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                 case TileInterface_1.TILE.DIRT:
                     [x, y] = [7 * 8, 0];
                     break;
+                case TileInterface_1.TILE.FLOOR:
+                    [x, y] = [11 * 8, 1 * 8];
+                    break;
                 case TileInterface_1.TILE.GOLD:
                     [x, y] = [11 * 8, 0];
                     break;
                 case TileInterface_1.TILE.GROUND:
                     [x, y] = [13 * 8, 1 * 8];
+                    break;
+                case TileInterface_1.TILE.LAIR:
+                    [x, y] = [12 * 8, 0];
+                    break;
+                case TileInterface_1.TILE.HATCHERY:
+                    [x, y] = [13 * 8, 0];
                     break;
                 default:
                     [x, y] = [0, 0];
@@ -253,6 +284,10 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                     [x, y] = [5 * 8, 0 * 8];
                 if (u && !d && l && r)
                     [x, y] = [4 * 8, 0 * 8];
+                if (u && d && l && !r)
+                    [x, y] = [6 * 8, 2 * 8];
+                if (u && d && !l && r)
+                    [x, y] = [4 * 8, 2 * 8];
                 if (!u && !d && !l && !r) {
                     if (!ul && !ur && dl && !dr)
                         [x, y] = [6 * 8, 4 * 8];
@@ -277,17 +312,15 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
             return null;
         }
         static pathTo(a, b) {
-            const path = [];
-            const limit = 100;
+            const neighbours = Tile.getNeighbours(b);
+            if (neighbours.every(t => t && t.interface.isHigh))
+                return null;
             const visited = [];
             const next = [a];
             const values = [];
-            let n = 0;
             let val = 0;
             values[a.id] = 1;
             while (next.length > 0) {
-                if (n++ >= limit)
-                    break;
                 const c = next.shift();
                 visited.push(c);
                 if (c) {
@@ -296,10 +329,7 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                     }
                     else {
                         const v = values[c.id];
-                        const n = Tile.findByPosition(c.x, c.y - 1);
-                        const s = Tile.findByPosition(c.x, c.y + 1);
-                        const e = Tile.findByPosition(c.x + 1, c.y);
-                        const w = Tile.findByPosition(c.x - 1, c.y);
+                        const [n, e, s, w] = Tile.getNeighbours(c);
                         if (n && !visited.includes(n) && !next.includes(n)) {
                             next.push(n);
                         }
@@ -321,17 +351,13 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                         if (w)
                             values[w.id] = Math.min(v + 1, values[w.id] || 1000000);
                         if ([n, s, e, w].includes(b)) {
+                            const path = [];
+                            if (!b.interface.isHigh)
+                                path.push(b);
                             let p = c;
-                            const lim = 100;
-                            let i = 0;
                             while (p !== a) {
                                 path.push(p);
-                                if (i++ >= lim)
-                                    break;
-                                const n = Tile.findByPosition(p.x, p.y - 1);
-                                const s = Tile.findByPosition(p.x, p.y + 1);
-                                const e = Tile.findByPosition(p.x + 1, p.y);
-                                const w = Tile.findByPosition(p.x - 1, p.y);
+                                const [n, e, s, w] = Tile.getNeighbours(p);
                                 if (n && values[n.id] !== undefined && values[n.id] < values[p.id]) {
                                     p = n;
                                 }
@@ -345,22 +371,37 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                                     p = w;
                                 }
                             }
+                            path.reverse();
+                            return path;
                         }
                     }
                 }
             }
-            path.reverse();
-            return path;
+            return null;
+        }
+        static getNeighbours(t) {
+            return [
+                Tile.findByPosition(t.x, t.y - 1),
+                Tile.findByPosition(t.x, t.y + 1),
+                Tile.findByPosition(t.x + 1, t.y),
+                Tile.findByPosition(t.x - 1, t.y)
+            ];
         }
     }
     exports.Tile = Tile;
     Tile.id = 0;
     Tile.instances = [];
 });
-define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface"], function (require, exports, Array2D_1, Tile_1, TileInterface_2) {
+define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite"], function (require, exports, Array2D_1, Tile_1, TileInterface_2, Sprite_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Map = void 0;
+    const dungeonHeart = new Sprite_2.Sprite(Sprite_2.spriteSheet, [
+        [13 * 8, 2 * 8, 24, 24],
+        [13 * 8, 5 * 8, 24, 24],
+        [13 * 8, 8 * 8, 24, 24],
+        [13 * 8, 5 * 8, 24, 24]
+    ]);
     class Map {
         constructor(w, h) {
             this.loading = true;
@@ -375,6 +416,12 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface"], functi
         }
         set(x, y, v) {
             this.tiles.set(x, y, v);
+        }
+        setArea(x1, y1, x2, y2, obj) {
+            for (let x = x1; x <= x2; x++)
+                for (let y = y1; y <= y2; y++) {
+                    this.get(x, y).set(obj);
+                }
         }
         resize(w, h) {
             [this._width, this._height] = [w, h];
@@ -392,19 +439,29 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface"], functi
                 context.drawImage(image, 0, 0);
                 const imageData = context.getImageData(0, 0, width, height);
                 const pixels = imageData.data;
-                for (let n = 0, y = 0; y < this._height; y++)
-                    for (let x = 0; x < this._width; x++, n += 4) {
+                for (let n = 0, y = 0; y < height; y++)
+                    for (let x = 0; x < width; x++, n += 4) {
+                        const color = [pixels[n], pixels[n + 1], pixels[n + 2]];
+                        const [r, g, b] = color;
+                        switch (true) {
+                            default:
+                                const type = Tile_1.Tile.tileFromColor(color);
+                                const tile = new Tile_1.Tile(type, x, y);
+                                this.set(x, y, tile);
+                                break;
+                        }
+                    }
+                for (let n = 0, y = 0; y < height; y++)
+                    for (let x = 0; x < width; x++, n += 4) {
                         const color = [pixels[n], pixels[n + 1], pixels[n + 2]];
                         const [r, g, b] = color;
                         switch (true) {
                             case (r === 0 && g === 255 && b === 0):
                                 out.camX = x;
                                 out.camY = y;
-                                break;
-                            default:
-                                const type = Tile_1.Tile.tileFromColor(color);
-                                const tile = new Tile_1.Tile(type, x, y);
-                                this.set(x, y, tile);
+                                this.setArea(x - 2, y - 2, x + 2, y + 2, { interface: TileInterface_2.TILE.FLOOR, owner: 1 });
+                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_2.TILE.NULL, owner: 0 });
+                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_2.TILE.SPECIAL, sprite: dungeonHeart });
                                 break;
                         }
                     }
@@ -418,13 +475,46 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface"], functi
     }
     exports.Map = Map;
 });
-define("Mob", ["require", "exports", "Tile"], function (require, exports, Tile_2) {
+define("Sound", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Sound = void 0;
+    class Sound {
+        constructor(src, count = 1, volume = 1) {
+            this.count = count;
+            this.audioArray = [];
+            for (let n = 0; n < count; n++) {
+                const a = new Audio(src);
+                a.volume = volume;
+                this.audioArray.push(a);
+            }
+        }
+        play(loop = false) {
+            for (let n = 0; n < this.count; n++) {
+                const inst = this.audioArray[n];
+                if (inst.paused) {
+                    inst.loop = loop;
+                    inst.play();
+                    return inst;
+                }
+            }
+        }
+    }
+    exports.Sound = Sound;
+});
+define("Mob", ["require", "exports", "Sound", "Tile", "TileInterface"], function (require, exports, Sound_1, Tile_2, TileInterface_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Mob = void 0;
+    const jobs = [];
+    const sfxHit = [
+        new Sound_1.Sound("./data/sfx/hit1.wav", 5),
+        new Sound_1.Sound("./data/sfx/hit2.wav", 5)
+    ];
     class Mob {
         constructor(type, x, y) {
             this.doingJob = false;
+            this.jobProgress = 0;
             this.interface = type;
             this.hp = type.hp;
             this.x = x;
@@ -432,51 +522,95 @@ define("Mob", ["require", "exports", "Tile"], function (require, exports, Tile_2
             this.path = [];
             Mob.instances.push(this);
         }
-        update() {
+        update(map) {
             if (this.doingJob) {
-                if (this.job && !this.job.selected) {
+                if (this.job
+                    && ((this.job.interface.isHigh && !this.job.selected)
+                        || (!this.job.interface.isHigh && this.job.interface !== TileInterface_3.TILE.GROUND))) {
+                    jobs.splice(jobs.indexOf(this.job), 1);
                     this.job = null;
                     this.doingJob = false;
                     console.log("job cancelled!");
                 }
-                if (this.path) {
+                if (this.path.length > 0) {
                     const t = this.path[0];
+                    const s = 1 / 8;
                     if (t) {
                         if (this.x != t.x)
-                            this.x += Math.sign(t.x - this.x) * 1 / 8;
+                            this.x += Math.sign(t.x - this.x) * s;
                         if (this.y != t.y)
-                            this.y += Math.sign(t.y - this.y) * 1 / 8;
+                            this.y += Math.sign(t.y - this.y) * s;
                         if (this.x === t.x && this.y === t.y) {
                             this.path.shift();
                         }
                     }
                 }
+                else if (this.job) {
+                    if (this.jobProgress++ < 20)
+                        return;
+                    this.jobProgress = 0;
+                    if (this.job.interface.isHigh) {
+                        this.job.interface = TileInterface_3.TILE.GROUND;
+                        this.job.selected = false;
+                        sfxHit[~~(Math.random() + 1)].play();
+                    }
+                    else {
+                        this.job.set({ interface: TileInterface_3.TILE.FLOOR, owner: 1 });
+                    }
+                    const tiles = Tile_2.Tile.getNeighbours(this.job);
+                    this.job.selected = false;
+                    tiles.push(this.job);
+                    tiles.forEach(t => {
+                        if (t)
+                            t.sprite = Tile_2.Tile.spriteFromType(t);
+                    });
+                }
             }
             if (!this.doingJob && this.interface.canDig) {
-                const job = this.findJob();
+                this.findJob(map);
             }
         }
         draw(ctx) {
             const i = ~~(performance.now() / 100) % 4;
             this.interface.sprite.draw(ctx, i, this.x * 8, this.y * 8);
         }
-        findJob() {
-            for (let n = 0; n < Tile_2.Tile.instances.length; n++) {
-                const t = Tile_2.Tile.instances[n];
-                const c = Tile_2.Tile.findByPosition(~~this.x, ~~this.y);
-                if (t.selected && c) {
-                    const path = Tile_2.Tile.pathTo(c, t);
-                    if (path !== null) {
-                        this.job = t;
-                        this.doingJob = true;
-                        this.path = path;
-                        console.log("found job!");
+        findJob(map) {
+            const tiles = Tile_2.Tile.instances;
+            const length = tiles.length;
+            for (let n = 0; n < length; n++) {
+                const t = tiles[n];
+                const c = map.get(~~this.x, ~~this.y);
+                if (jobs.includes(t))
+                    continue;
+                if (t.selected) {
+                    if (c) {
+                        const path = Tile_2.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.job = t;
+                            this.doingJob = true;
+                            this.path = path;
+                            jobs.push(t);
+                            break;
+                        }
+                    }
+                }
+                if (t.interface === TileInterface_3.TILE.GROUND) {
+                    const neighbours = Tile_2.Tile.getNeighbours(t);
+                    if (neighbours.some(t => t && t.owner === 1)) {
+                        const path = Tile_2.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.job = t;
+                            this.doingJob = true;
+                            this.path = path;
+                            jobs.push(t);
+                            break;
+                        }
                     }
                 }
             }
         }
-        static updateAll() {
-            Mob.instances.forEach(i => i.update());
+        static updateAll(map) {
+            Mob.instances.forEach(i => i.update(map));
         }
         static drawAll(ctx) {
             Mob.instances.forEach(i => i.draw(ctx));
@@ -485,13 +619,36 @@ define("Mob", ["require", "exports", "Tile"], function (require, exports, Tile_2
     exports.Mob = Mob;
     Mob.instances = [];
 });
-define("index", ["require", "exports", "Input", "Tile", "Sprite", "Map", "Mob"], function (require, exports, Input_1, Tile_3, Sprite_2, Map_1, Mob_1) {
+define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite", "Map", "Mob", "Sound"], function (require, exports, Input_1, Tile_3, TileInterface_4, Sprite_3, Map_1, Mob_1, Sound_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    const cursor = new Sprite_2.Sprite(Sprite_2.spriteSheet, [[7 * 8, 7 * 8, 8, 12]]);
+    let overGUI = false;
+    let building = false;
+    let buildingType;
+    let topText = "";
+    let displayText = "";
+    let cursorIndex = 1;
+    const musBackground = new Sound_2.Sound("./data/music/ambient.mp3");
+    const musAmbient2 = new Sound_2.Sound("./data/music/dungeon_ambient_1.ogg");
+    setTimeout(() => {
+        musBackground.play(true);
+        musAmbient2.play(true);
+    }, 1000);
+    const sfxDig = new Sound_2.Sound("./data/sfx/dig.wav", 10, 0.5);
+    const icons = [
+        new Sprite_3.Sprite(Sprite_3.spriteSheet, [[11 * 8, 2 * 8, 8, 8]]),
+        new Sprite_3.Sprite(Sprite_3.spriteSheet, [[0 * 8, 12 * 8, 8, 8]]),
+        new Sprite_3.Sprite(Sprite_3.spriteSheet, [[1 * 8, 12 * 8, 8, 8]]),
+    ];
+    const cursor = new Sprite_3.Sprite(Sprite_3.spriteSheet, [
+        [7 * 8, 7 * 8, 8, 8],
+        [7 * 8, 8 * 8, 8, 8],
+        [7 * 8, 9 * 8, 8, 8]
+    ]);
+    const lair = new Sprite_3.Sprite(Sprite_3.spriteSheet, [[12 * 8, 0 * 8, 8, 8]]);
     const imp = {
         name: "Imp",
-        sprite: new Sprite_2.Sprite(Sprite_2.spriteSheet, [
+        sprite: new Sprite_3.Sprite(Sprite_3.spriteSheet, [
             [9 * 8, 6 * 8, 8, 8],
             [10 * 8, 6 * 8, 8, 8],
             [11 * 8, 6 * 8, 8, 8],
@@ -500,14 +657,16 @@ define("index", ["require", "exports", "Input", "Tile", "Sprite", "Map", "Mob"],
         hp: 4,
         canDig: true
     };
+    new Mob_1.Mob(imp, 28, 29);
     new Mob_1.Mob(imp, 30, 31);
     const horny = {
-        sprite: new Sprite_2.Sprite(Sprite_2.spriteSheet, [[8 * 8, 6 * 8, 8, 12]]),
+        sprite: new Sprite_3.Sprite(Sprite_3.spriteSheet, [[8 * 8, 6 * 8, 8, 12]]),
         x: 32,
         y: 32
     };
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
     Input_1.keyboard.init();
     Input_1.mouse.init();
     const camera = {
@@ -515,12 +674,19 @@ define("index", ["require", "exports", "Input", "Tile", "Sprite", "Map", "Mob"],
         y: 0
     };
     const map = new Map_1.Map(64, 64);
-    map.load("../data/maps/test.png", (out) => {
+    map.load("./data/maps/test.png", (out) => {
         camera.x = out.camX;
         camera.y = out.camY;
     });
     let selectState = false;
-    requestAnimationFrame(function loop() {
+    let pDelta = 0;
+    let fpsMax = 60;
+    let requestId;
+    (function loop(time) {
+        const delta = time - pDelta;
+        if (fpsMax && delta < 1000 / fpsMax)
+            return;
+        pDelta = delta;
         const speed = 0.125;
         const down = Input_1.keyboard.down;
         if (down['w'] || down['W'] || down['ArrowUp'])
@@ -536,9 +702,10 @@ define("index", ["require", "exports", "Input", "Tile", "Sprite", "Map", "Mob"],
         const cx = Math.round(-camera.x * 8);
         const cy = Math.round(-camera.y * 8);
         ctx.translate(cx + 32, cy + 32);
-        Mob_1.Mob.updateAll();
-        for (let x = Math.max(0, ~~camera.x - 4); x < Math.min(63, ~~camera.x + 5); x++)
-            for (let y = Math.max(0, ~~camera.y - 4); y < Math.min(63, ~~camera.y + 5); y++) {
+        updateGUI();
+        Mob_1.Mob.updateAll(map);
+        for (let x = Math.max(0, ~~camera.x - 6); x < Math.min(63, ~~camera.x + 5); x++)
+            for (let y = Math.max(0, ~~camera.y - 6); y < Math.min(63, ~~camera.y + 5); y++) {
                 map.get(x, y).draw(ctx);
             }
         Mob_1.Mob.drawAll(ctx);
@@ -546,24 +713,103 @@ define("index", ["require", "exports", "Input", "Tile", "Sprite", "Map", "Mob"],
         const mX = ~~(Input_1.mouse.x / 10 / 8 + camera.x - 4);
         const mY = ~~(Input_1.mouse.y / 10 / 8 + camera.y - 4);
         ctx.strokeRect(mX * 8 + 0.5, mY * 8 + 0.5, 7, 7);
-        if (Input_1.mouse.pressed[1]) {
+        if (!overGUI) {
             const tile = Tile_3.Tile.findByPosition(mX, mY);
-            if (tile && tile.interface.minable) {
-                tile.selected = !tile.selected;
-                selectState = tile.selected;
-            }
-        }
-        if (Input_1.mouse.down[1]) {
-            const tile = Tile_3.Tile.findByPosition(mX, mY);
-            if (tile && tile.interface.minable) {
-                tile.selected = selectState;
+            if (tile) {
+                topText = tile.interface.name;
+                if (Input_1.mouse.pressed[3]) {
+                    building = false;
+                    console.log("cancel building");
+                }
+                if (Input_1.mouse.pressed[1]) {
+                    if (!building && tile.interface.minable) {
+                        tile.selected = !tile.selected;
+                        selectState = tile.selected;
+                        sfxDig.play();
+                    }
+                }
+                if (Input_1.mouse.down[1]) {
+                    if (building) {
+                        if (tile.interface === TileInterface_4.TILE.FLOOR && tile.owner === 1) {
+                            tile.set({ interface: buildingType });
+                            tile.sprite = Tile_3.Tile.spriteFromType(tile);
+                        }
+                    }
+                    else if (tile.interface.minable) {
+                        if (tile.selected !== selectState) {
+                            tile.selected = selectState;
+                            sfxDig.play();
+                        }
+                    }
+                }
             }
         }
         ctx.restore();
-        cursor.draw(ctx, 0, Input_1.mouse.x / 10, Input_1.mouse.y / 10);
+        drawGUI();
+        cursor.draw(ctx, cursorIndex, Input_1.mouse.x / 10, Input_1.mouse.y / 10);
         Input_1.keyboard.update();
         Input_1.mouse.update();
-        requestAnimationFrame(loop);
-    });
+        requestId = requestAnimationFrame(loop);
+    })();
+    const buttons = [
+        "",
+        "Lair",
+        "Hatchery"
+    ];
+    function updateGUI() {
+        overGUI = false;
+        topText = "";
+        displayText = "";
+        cursorIndex = building ? 2 : 1;
+        const mx = ~~(Input_1.mouse.x / 10);
+        const my = ~~(Input_1.mouse.y / 10);
+        if (my > 54) {
+            cursorIndex = 0;
+            overGUI = true;
+        }
+        for (let n = 0; n < 7; n++) {
+            if (mx > (1 + n * 9) && mx < (1 + n * 9 + 8) && my > 55 && my < 63) {
+                displayText = buttons[n];
+                if (Input_1.mouse.pressed[1]) {
+                    switch (displayText) {
+                        case "Lair":
+                            setBuildTemplate(TileInterface_4.TILE.LAIR);
+                            break;
+                        case "Hatchery":
+                            setBuildTemplate(TileInterface_4.TILE.HATCHERY);
+                            break;
+                    }
+                }
+            }
+        }
+    }
+    function drawGUI() {
+        for (let n = 0; n < 7; n++) {
+            const i = icons[n] === undefined ? 0 : n;
+            icons[i].draw(ctx, 0, 1 + n * 9, 55);
+        }
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "4px Ikkle4";
+        if (displayText)
+            drawText(displayText, 32, 54);
+        if (topText)
+            drawText(topText, 32, 5);
+    }
+    function setBuildTemplate(type) {
+        building = true;
+        buildingType = type;
+    }
+    function drawText(t, x, y) {
+        const words = t.split(" ");
+        let length = (words.length - 1) * 4;
+        words.forEach(w => {
+            length += ctx.measureText(w).width;
+        });
+        let dx = x - (~~(length / 2));
+        words.forEach(w => {
+            ctx.fillText(w, dx, y);
+            dx += ctx.measureText(w).width + 4;
+        });
+    }
 });
 //# sourceMappingURL=index.js.map

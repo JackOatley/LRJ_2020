@@ -1,6 +1,12 @@
 import { Sprite, spriteSheet } from './Sprite';
 import { TILE, TileInterface } from './TileInterface';
 
+export interface SetTile {
+	interface?: TileInterface;
+	owner?: number;
+	sprite?: Sprite;
+}
+
 export class Tile {
 
 	static id: number = 0;
@@ -10,7 +16,7 @@ export class Tile {
 	readonly x: number;
 	readonly y: number;
 	public sprite: Sprite;
-	private owner: number;
+	public owner: number = 0;
 	public interface: TileInterface;
 	public faces: number = 0b00000000;
 	public selected: boolean = false;
@@ -24,15 +30,28 @@ export class Tile {
 		Tile.instances.push(this);
 	}
 
+	public set(obj: SetTile) {
+		if (obj.owner) this.owner = obj.owner;
+		if (obj.interface) this.interface = obj.interface;
+		if (obj.sprite) this.sprite = obj.sprite;
+	}
+
 	public draw(ctx: CanvasRenderingContext2D) {
+		if (this.interface === TILE.NULL) {
+			return;
+		}
+		if (this.owner) {
+			ctx.fillStyle = "#911A1A";
+			ctx.fillRect(this.x*8, this.y*8, 8, 8);
+		}
 		if (this.sprite) {
-			this.sprite.draw(ctx, 0, this.x*8, this.y*8);
-			if (this.selected) {
-				ctx.fillStyle = "#FFFF00";
-				ctx.globalAlpha = 0.75 + Math.sin(performance.now() / 250) * 0.25;
-				ctx.fillRect(this.x*8, this.y*8, 8, 8);
-				ctx.globalAlpha = 1;
-			}
+			this.sprite.draw(ctx, performance.now()/100, this.x*8, this.y*8);
+		}
+		if (this.selected) {
+			ctx.fillStyle = "#FFFF00";
+			ctx.globalAlpha = 0.75 + Math.sin(performance.now() / 250) * 0.25;
+			ctx.fillRect(this.x*8, this.y*8, 8, 8);
+			ctx.globalAlpha = 1;
 		}
 	}
 
@@ -49,12 +68,18 @@ export class Tile {
 
 	static spriteFromType(tile: Tile): Sprite {
 
+		if (tile.interface === TILE.SPECIAL)
+			return tile.sprite;
+
 		let [x, y, w, h] = [0, 0, 8, 8];
 		switch (tile.interface) {
 			case TILE.BEDROCK: [x, y] = [7*8, 6*8]; break;
 			case TILE.DIRT: [x, y] = [7*8, 0]; break;
+			case TILE.FLOOR: [x, y] = [11*8, 1*8]; break;
 			case TILE.GOLD: [x, y] = [11*8, 0]; break;
 			case TILE.GROUND: [x, y] = [13*8, 1*8]; break;
+			case TILE.LAIR: [x, y] = [12*8, 0]; break;
+			case TILE.HATCHERY: [x, y] = [13*8, 0]; break;
 			default: [x, y] = [0, 0]; break;
 		}
 
@@ -94,6 +119,9 @@ export class Tile {
 			if (!u &&  d &&  l &&  r) [x, y] = [5*8, 0*8];	// d + l + r
 			if ( u && !d &&  l &&  r) [x, y] = [4*8, 0*8];	// u + l + r
 
+			if ( u &&  d &&  l && !r) [x, y] = [6*8, 2*8];	// u + d + l
+			if ( u &&  d && !l &&  r) [x, y] = [4*8, 2*8];	// u + d + r
+
 			// purely diags
 			if (!u && !d && !l && !r) {
 				if (!ul && !ur &&  dl && !dr) [x, y] = [6*8, 4*8];	// dl
@@ -123,17 +151,18 @@ export class Tile {
 
 	static pathTo(a: Tile, b: Tile): Array<Tile> | null {
 
-		const path = [];
-		const limit: number = 100;
+		// tile b is totally blocked, cannot path
+		const neighbours = Tile.getNeighbours(b);
+		if (neighbours.every(t => t && t.interface.isHigh))
+			return null;
+
 		const visited: Array<Tile | null> = [];
 		const next: Array<Tile | null> = [a];
 		const values: Array<number> = [];
 
-		let n = 0
 		let val = 0;
 		values[a.id] = 1;
 		while (next.length > 0) {
-			if (n++ >= limit) break;
 
 			//
 			const c = <Tile>next.shift();
@@ -149,10 +178,7 @@ export class Tile {
 
 					const v = values[c.id];
 
-					const n = Tile.findByPosition(c.x, c.y-1);
-					const s = Tile.findByPosition(c.x, c.y+1);
-					const e = Tile.findByPosition(c.x+1, c.y);
-					const w = Tile.findByPosition(c.x-1, c.y);
+					const [n, e, s, w] = Tile.getNeighbours(c);
 
 					if (n && !visited.includes(n) && !next.includes(n)) { next.push(n); }
 					if (s && !visited.includes(s) && !next.includes(s)) { next.push(s); }
@@ -164,16 +190,15 @@ export class Tile {
 					if (w) values[w.id] = Math.min(v+1, values[w.id] || 1000000);
 
 					if ([n, s, e, w].includes(b)) {
+
+						const path = [];
+						if (!b.interface.isHigh)
+							path.push(b);
+
 						let p = c;
-						const lim = 100;
-						let i = 0;
 						while (p !== a) {
 							path.push(p);
-							if (i++ >= lim) break;
-							const n = Tile.findByPosition(p.x, p.y-1);
-							const s = Tile.findByPosition(p.x, p.y+1);
-							const e = Tile.findByPosition(p.x+1, p.y);
-							const w = Tile.findByPosition(p.x-1, p.y);
+							const [n, e, s, w] = Tile.getNeighbours(p);
 							if (n && values[n.id] !== undefined && values[n.id] < values[p.id]) {
 								p = n;
 							}
@@ -187,7 +212,10 @@ export class Tile {
 								p = w;
 							}
 						}
-						//console.log("done!", path.reverse());
+
+						path.reverse();
+						return path;
+
 					}
 
 				}
@@ -196,9 +224,17 @@ export class Tile {
 
 		}
 
-		path.reverse();
-		return path;
+		return null;
 
+	}
+
+	static getNeighbours(t: Tile): Array<Tile | null> {
+		return [
+			Tile.findByPosition(t.x, t.y-1),
+			Tile.findByPosition(t.x, t.y+1),
+			Tile.findByPosition(t.x+1, t.y),
+			Tile.findByPosition(t.x-1, t.y)
+		];
 	}
 
 }

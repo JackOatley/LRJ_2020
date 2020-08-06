@@ -1,6 +1,6 @@
 import { Texture } from './Texture';
 
-export const spriteSheet = new Texture('../img/bhts.png');
+export const spriteSheet = new Texture('./img/bhts.png');
 
 class Frame {
 
@@ -34,7 +34,7 @@ export class Sprite {
 	}
 
 	public draw(ctx: CanvasRenderingContext2D, i: number, x: number, y: number) {
-		const frame = this.frames[i];
+		const frame = this.frames[~~i%this.frames.length];
 		frame.texture.draw(
 			ctx,
 			frame.x,
