@@ -329,19 +329,16 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                     }
                     else {
                         const v = values[c.id];
-                        const [n, e, s, w] = Tile.getNeighbours(c);
-                        if (n && !visited.includes(n) && !next.includes(n)) {
+                        const neighbours = Tile.getNeighbours(c);
+                        const [n, e, s, w] = neighbours;
+                        if (n && !visited.includes(n) && !next.includes(n))
                             next.push(n);
-                        }
-                        if (s && !visited.includes(s) && !next.includes(s)) {
+                        if (s && !visited.includes(s) && !next.includes(s))
                             next.push(s);
-                        }
-                        if (e && !visited.includes(e) && !next.includes(e)) {
+                        if (e && !visited.includes(e) && !next.includes(e))
                             next.push(e);
-                        }
-                        if (w && !visited.includes(w) && !next.includes(w)) {
+                        if (w && !visited.includes(w) && !next.includes(w))
                             next.push(w);
-                        }
                         if (n)
                             values[n.id] = Math.min(v + 1, values[n.id] || 1000000);
                         if (s)
@@ -350,7 +347,7 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                             values[e.id] = Math.min(v + 1, values[e.id] || 1000000);
                         if (w)
                             values[w.id] = Math.min(v + 1, values[w.id] || 1000000);
-                        if ([n, s, e, w].includes(b)) {
+                        if (neighbours.includes(b)) {
                             const path = [];
                             if (!b.interface.isHigh)
                                 path.push(b);
@@ -490,6 +487,8 @@ define("Sound", ["require", "exports"], function (require, exports) {
             }
         }
         play(loop = false) {
+            if (!Sound.enabled)
+                return;
             for (let n = 0; n < this.count; n++) {
                 const inst = this.audioArray[n];
                 if (inst.paused) {
@@ -501,6 +500,7 @@ define("Sound", ["require", "exports"], function (require, exports) {
         }
     }
     exports.Sound = Sound;
+    Sound.enabled = false;
 });
 define("Mob", ["require", "exports", "Sound", "Tile", "TileInterface"], function (require, exports, Sound_1, Tile_2, TileInterface_3) {
     "use strict";
@@ -564,6 +564,10 @@ define("Mob", ["require", "exports", "Sound", "Tile", "TileInterface"], function
                         if (t)
                             t.sprite = Tile_2.Tile.spriteFromType(t);
                     });
+                    const i = jobs.indexOf(this.job);
+                    jobs.splice(i, 1);
+                    this.job = null;
+                    this.doingJob = false;
                 }
             }
             if (!this.doingJob && this.interface.canDig) {

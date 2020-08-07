@@ -177,19 +177,19 @@ export class Tile {
 				else {
 
 					const v = values[c.id];
+					const neighbours = Tile.getNeighbours(c);
+					const [n, e, s, w] = neighbours;
 
-					const [n, e, s, w] = Tile.getNeighbours(c);
-
-					if (n && !visited.includes(n) && !next.includes(n)) { next.push(n); }
-					if (s && !visited.includes(s) && !next.includes(s)) { next.push(s); }
-					if (e && !visited.includes(e) && !next.includes(e)) { next.push(e); }
-					if (w && !visited.includes(w) && !next.includes(w)) { next.push(w); }
+					if (n && !visited.includes(n) && !next.includes(n)) next.push(n);
+					if (s && !visited.includes(s) && !next.includes(s)) next.push(s);
+					if (e && !visited.includes(e) && !next.includes(e)) next.push(e);
+					if (w && !visited.includes(w) && !next.includes(w)) next.push(w);
 					if (n) values[n.id] = Math.min(v+1, values[n.id] || 1000000);
 					if (s) values[s.id] = Math.min(v+1, values[s.id] || 1000000);
 					if (e) values[e.id] = Math.min(v+1, values[e.id] || 1000000);
 					if (w) values[w.id] = Math.min(v+1, values[w.id] || 1000000);
 
-					if ([n, s, e, w].includes(b)) {
+					if (neighbours.includes(b)) {
 
 						const path = [];
 						if (!b.interface.isHigh)

@@ -93,6 +93,10 @@ export class Mob {
 				tiles.forEach(t => {
 					if (t) t.sprite = Tile.spriteFromType(t);
 				});
+				const i = jobs.indexOf(this.job);
+				jobs.splice(i, 1);
+				this.job = null;
+				this.doingJob = false;
 
 			}
 

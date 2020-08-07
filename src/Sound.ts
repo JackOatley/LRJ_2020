@@ -1,5 +1,7 @@
 export class Sound {
 
+	static enabled:boolean = false;
+
 	private count:number;
 	private audioArray:Array<HTMLAudioElement>;
 
@@ -14,6 +16,7 @@ export class Sound {
 	}
 
 	public play(loop:boolean=false) {
+		if (!Sound.enabled) return;
 		for (let n=0; n<this.count; n++) {
 			const inst = this.audioArray[n];
 			if (inst.paused) {
