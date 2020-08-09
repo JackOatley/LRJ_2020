@@ -1,6 +1,6 @@
 export class Sound {
 
-	static enabled:boolean = false;
+	static enabled:boolean = true;
 
 	private count:number;
 	private audioArray:Array<HTMLAudioElement>;

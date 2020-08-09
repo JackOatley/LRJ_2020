@@ -5,6 +5,7 @@ export interface SetTile {
 	interface?: TileInterface;
 	owner?: number;
 	sprite?: Sprite;
+	partOf?: number;
 }
 
 export class Tile {
@@ -20,6 +21,7 @@ export class Tile {
 	public interface: TileInterface;
 	public faces: number = 0b00000000;
 	public selected: boolean = false;
+	public partOf: number = 0;			// tile is part of a room, room ID
 
 	constructor(i: TileInterface, x: number, y: number) {
 		this.id = Tile.id++;
@@ -34,6 +36,7 @@ export class Tile {
 		if (obj.owner) this.owner = obj.owner;
 		if (obj.interface) this.interface = obj.interface;
 		if (obj.sprite) this.sprite = obj.sprite;
+		if (obj.partOf) this.partOf = obj.partOf;
 	}
 
 	public draw(ctx: CanvasRenderingContext2D) {
@@ -132,6 +135,7 @@ export class Tile {
 			if (u || d || l || r) {
 				if (tile.interface === TILE.BEDROCK) y += 6 * 8;
 				if (tile.interface === TILE.GOLD) x += 4 * 8;
+				if (tile.interface === TILE.WALL) x -= 4 * 8;
 			}
 
 		}

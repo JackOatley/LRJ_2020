@@ -47,4 +47,13 @@ export class Array2D<T> {
 		}
 	}
 
+	public forEach(f:Function) {
+		const w = this.width;
+		const h = this.height;
+		for (let y = 0; y < h; y++)
+		for (let x = 0; x < w; x++) {
+			f(this.data[y][x]);
+		}
+	}
+
 }

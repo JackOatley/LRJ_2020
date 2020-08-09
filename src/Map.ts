@@ -12,16 +12,29 @@ const dungeonHeart = new Sprite(spriteSheet, [
 	[13*8, 5*8, 24, 24]
 ])
 
+const portal = new Sprite(spriteSheet, [
+	[13*8, 11*8, 24, 24]
+])
+
 export interface LoadMapCallbackArgs {
 	camX: number;
 	camY: number;
 }
 
+export interface BuildingInterface {
+	name: string;
+	id: number;
+	owner: number;
+}
+
 export class Map {
+
+	static buildingID = 1;
+	static buildings: Array<BuildingInterface> = [];
 
 	private _width: number;
 	private _height: number;
-	private tiles: Array2D<Tile>;
+	public tiles: Array2D<Tile>;
 	private loading: boolean = true;
 
 	get width():number { return this._width; }
@@ -91,15 +104,24 @@ export class Map {
 			for (let x = 0; x < width; x++, n += 4) {
 				const color = [pixels[n], pixels[n+1], pixels[n+2]];
 				const [r, g, b] = color;
+				let i;
 				switch (true) {
 
 					// dungeon heart
 					case (r===0 && g===255 && b===0):
 						out.camX = x;
 						out.camY = y;
+						i = Map.getNewBuilding("Dungeon Heart", 1);
 						this.setArea(x-2, y-2, x+2, y+2, { interface: TILE.FLOOR, owner: 1 });
-						this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, owner: 0 });
+						this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, partOf: i, owner: 1 });
 						this.setArea(x-1, y-1, x-1, y-1, { interface: TILE.SPECIAL, sprite: dungeonHeart });
+						break;
+
+					// portal
+					case (r===0 && g===0 && b===255):
+						i = Map.getNewBuilding("Portal", 0);
+						this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, partOf: i, owner: 0 });
+						this.setArea(x-1, y-1, x-1, y-1, { interface: TILE.SPECIAL, sprite: portal });
 						break;
 
 				}
@@ -114,6 +136,19 @@ export class Map {
 
 		}
 		image.src = src;
+	}
+
+	static getNewBuilding(name: string, owner: number): number {
+		Map.buildings.push({
+			id: Map.buildingID,
+			name: name,
+			owner: owner
+		})
+		return Map.buildingID++;
+	}
+
+	static getBuilding(t: Tile): BuildingInterface | undefined {
+		return Map.buildings.find(b => t.partOf === b.id);
 	}
 
 }
