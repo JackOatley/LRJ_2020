@@ -83,6 +83,7 @@ export class Tile {
 			case TILE.GROUND: [x, y] = [13*8, 1*8]; break;
 			case TILE.LAIR: [x, y] = [12*8, 0]; break;
 			case TILE.HATCHERY: [x, y] = [13*8, 0]; break;
+			case TILE.TREASURY: [x, y] = [14*8, 0]; break;
 			default: [x, y] = [0, 0]; break;
 		}
 

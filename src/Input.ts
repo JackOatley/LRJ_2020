@@ -1,3 +1,5 @@
+const canvas = <HTMLCanvasElement>document.getElementById('canvas');
+
 interface Dict {
 	[key: string]: boolean;
 }
@@ -39,17 +41,17 @@ export const mouse = {
 	released: <boolean[]>[],
 	down: <boolean[]>[],
 	init: () => {
-		document.addEventListener('mousemove', e => {
+		canvas.addEventListener('mousemove', e => {
 			mouse.x = e.offsetX;
 			mouse.y = e.offsetY;
 		});
-		document.addEventListener("mousedown", e => {
+		canvas.addEventListener("mousedown", e => {
 			if (!mouse.down[e.which]) {
 				mouse.pressed[e.which] = true;
 				mouse.down[e.which] = true;
 			}
 		});
-		document.addEventListener("mouseup", e => {
+		canvas.addEventListener("mouseup", e => {
 			if (mouse.down[e.which]) {
 				mouse.released[e.which] = true;
 				mouse.down[e.which] = false;

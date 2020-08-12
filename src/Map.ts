@@ -4,17 +4,23 @@ import { Texture } from './Texture';
 import { Tile, SetTile } from './Tile';
 import { TILE, TileInterface } from './TileInterface';
 import { Sprite, spriteSheet } from './Sprite';
+import { Mob } from 'Mob';
+import { CREATURE } from 'Creature';
 
 const dungeonHeart = new Sprite(spriteSheet, [
 	[13*8, 2*8, 24, 24],
 	[13*8, 5*8, 24, 24],
 	[13*8, 8*8, 24, 24],
 	[13*8, 5*8, 24, 24]
-])
+]);
 
 const portal = new Sprite(spriteSheet, [
 	[13*8, 11*8, 24, 24]
-])
+]);
+
+const heroGate = new Sprite(spriteSheet, [
+	[10*8, 11*8, 24, 24]
+]);
 
 export interface LoadMapCallbackArgs {
 	camX: number;
@@ -112,9 +118,13 @@ export class Map {
 						out.camX = x;
 						out.camY = y;
 						i = Map.getNewBuilding("Dungeon Heart", 1);
-						this.setArea(x-2, y-2, x+2, y+2, { interface: TILE.FLOOR, owner: 1 });
+						this.setArea(x-2, y-2, x+2, y+2, { interface: TILE.TREASURY, owner: 1 });
 						this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, partOf: i, owner: 1 });
 						this.setArea(x-1, y-1, x-1, y-1, { interface: TILE.SPECIAL, sprite: dungeonHeart });
+						new Mob(CREATURE.IMP, x-2, y-1);
+						new Mob(CREATURE.IMP, x-2, y+1);
+						new Mob(CREATURE.IMP, x+2, y-1);
+						new Mob(CREATURE.IMP, x+2, y+1);
 						break;
 
 					// portal
@@ -123,6 +133,13 @@ export class Map {
 						this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, partOf: i, owner: 0 });
 						this.setArea(x-1, y-1, x-1, y-1, { interface: TILE.SPECIAL, sprite: portal });
 						break;
+
+						// hero gate
+						case (r===255 && g===0 && b===255):
+							i = Map.getNewBuilding("Hero Gate", 0);
+							this.setArea(x-1, y-1, x+1, y+1, { interface: TILE.NULL, partOf: i, owner: 2 });
+							this.setArea(x-1, y-1, x-1, y-1, { interface: TILE.SPECIAL, sprite: heroGate });
+							break;
 
 				}
 			}

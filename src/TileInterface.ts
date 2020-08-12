@@ -13,6 +13,7 @@ export const TILE = {
 	WALL: { name: "Wall", hasFaces: true, isHigh: true, minable: true },
 	LAIR: { name: "Lair" },
 	HATCHERY: { name: "Hatchery" },
+	TREASURY: { name: "Treasury" },
 	BEDROCK: { name: "Bedrock", hasFaces: true, isHigh: true },
 	DIRT: { name: "Dirt", hasFaces: true, isHigh: true, minable: true },
 	GOLD: { name: "Gold", hasFaces: true, isHigh: true, minable: true }

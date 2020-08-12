@@ -16,10 +16,11 @@ let overGUI = false;
 let building = false;
 let buildingType;
 let buildingID = 0;
-let topText = "";
+//let topText = "";
 let displayText = "";
 let cursorIndex = 1;
 let attractCreatureTimer = 60;
+let gold = 5000;
 
 // load musicdungeon_ambient_1
 const music = new Sound("./data/music/Sanctuary.mp3", 1, 0.5);
@@ -43,24 +44,20 @@ const interval = setInterval(() => {
 
 // load sfx
 const sfxDig = new Sound("./data/sfx/dig.wav", 10, 0.5);
+const sprGold = new Sprite(spriteSheet, [[11*8, 4*8, 8, 8]]);
 
+const hudGold = new Sprite(spriteSheet, [[15*8+4, 0*8, 8, 8]]);
 const icons = [
 	new Sprite(spriteSheet, [[11*8, 2*8, 8, 8]]),	// blank
 	new Sprite(spriteSheet, [[0*8, 12*8, 8, 8]]),	// lair
 	new Sprite(spriteSheet, [[1*8, 12*8, 8, 8]]),	// hatchery
+	new Sprite(spriteSheet, [[2*8, 12*8, 8, 8]]),	// treasury
 ];
 const cursor = new Sprite(spriteSheet, [
 	[7*8, 7*8, 8, 8],		// trident
 	[7*8, 8*8, 8, 8],		// pickaxe
 	[7*8, 9*8, 8, 8]		// building
 ]);
-
-new Mob(CREATURE.IMP, 30, 27);
-new Mob(CREATURE.IMP, 30, 31);
-new Mob(CREATURE.IMP, 34, 27);
-new Mob(CREATURE.IMP, 34, 31);
-
-//new Mob(CREATURE.GOBLIN, 32, 31);
 
 const horny = {
 	sprite: new Sprite(spriteSheet, [[8*8, 6*8, 8, 12]]),
@@ -117,9 +114,9 @@ let requestId;
 
 			if (tile.partOf) {
 				const building = Map.buildings.find(e => e.id === tile.partOf);
-				if (building) topText = building.name;
+				if (building) displayText = building.name;
 			} else {
-				topText = tile.interface.name;
+				displayText = tile.interface.name;
 			}
 
 			// cancel current action
@@ -242,12 +239,13 @@ function drawGame() {
 const buttons = [
 	"",
 	"Lair",
-	"Hatchery"
+	"Hatchery",
+	"Treasury"
 ]
 
 function updateGUI() {
 	overGUI = false;
-	topText = "";
+	//topText = "";
 	displayText = "";
 	cursorIndex = building ? 2 : 1;
 
@@ -266,6 +264,7 @@ function updateGUI() {
 				switch (displayText) {
 					case "Lair": setBuildTemplate(TILE.LAIR); break;
 					case "Hatchery": setBuildTemplate(TILE.HATCHERY); break;
+					case "Treasury": setBuildTemplate(TILE.TREASURY); break;
 				}
 			}
 		}
@@ -274,15 +273,22 @@ function updateGUI() {
 }
 
 function drawGUI() {
+
+	// draw building icons
 	for (let n = 0; n < 7; n++) {
 		const i = icons[n] === undefined ? 0 : n;
 		icons[i].draw(ctx, 0, 1+n*9, 55);
 	}
 
+	// draw resources
+	hudGold.draw(ctx, 0, 1, 1);
+	drawText(gold.toString(), 6, 5, 0);
+
+	// draw tooltip text
 	ctx.fillStyle = "#ffc700";
 	ctx.font = "4px Ikkle4";
 	if (displayText) drawText(displayText, 32, 54);
-	if (topText) drawText(topText, 32, 5);
+	//if (topText) drawText(topText, 32, 10);
 
 }
 
@@ -291,13 +297,13 @@ function setBuildTemplate(type: TileInterface) {
 	buildingType = type;
 }
 
-function drawText(t:string, x:number, y:number) {
+function drawText(t:string, x:number, y:number, align:number=1) {
 	const words = t.split(" ");
 	let length = (words.length - 1) * 4;
 	words.forEach(w => {
 		length += ctx.measureText(w).width;
 	});
-	let dx = x-(~~(length/2));
+	let dx = align ? x-(~~(length/2)) : x;
 	words.forEach(w => {
 		ctx.fillText(w, dx, y);
 		dx += ctx.measureText(w).width + 4;
@@ -305,6 +311,7 @@ function drawText(t:string, x:number, y:number) {
 }
 
 function updateCamera() {
+
 	// move camera
 	const speed = 0.125;
 	const down = keyboard.down;
@@ -313,9 +320,15 @@ function updateCamera() {
 	if (down['s'] || down['S'] || down['ArrowDown']) camera.y += speed;
 	if (down['d'] || down['D'] || down['ArrowRight']) camera.x += speed;
 
+	if (camera.x < 0) camera.x = 0;
+	if (camera.x > 32) camera.x = 32;
+	if (camera.y < 0) camera.y = 0;
+	if (camera.y > 32) camera.y = 32;
+
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	ctx.save();
 	const cx = Math.round(-camera.x * 8);
 	const cy = Math.round(-camera.y * 8);
 	ctx.translate(cx + 32, cy + 32);
+
 }

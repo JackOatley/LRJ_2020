@@ -123,6 +123,7 @@ define("Input", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.mouse = exports.keyboard = void 0;
+    const canvas = document.getElementById('canvas');
     exports.keyboard = {
         pressed: {},
         released: {},
@@ -155,17 +156,17 @@ define("Input", ["require", "exports"], function (require, exports) {
         released: [],
         down: [],
         init: () => {
-            document.addEventListener('mousemove', e => {
+            canvas.addEventListener('mousemove', e => {
                 exports.mouse.x = e.offsetX;
                 exports.mouse.y = e.offsetY;
             });
-            document.addEventListener("mousedown", e => {
+            canvas.addEventListener("mousedown", e => {
                 if (!exports.mouse.down[e.which]) {
                     exports.mouse.pressed[e.which] = true;
                     exports.mouse.down[e.which] = true;
                 }
             });
-            document.addEventListener("mouseup", e => {
+            canvas.addEventListener("mouseup", e => {
                 if (exports.mouse.down[e.which]) {
                     exports.mouse.released[e.which] = true;
                     exports.mouse.down[e.which] = false;
@@ -192,6 +193,7 @@ define("TileInterface", ["require", "exports"], function (require, exports) {
         WALL: { name: "Wall", hasFaces: true, isHigh: true, minable: true },
         LAIR: { name: "Lair" },
         HATCHERY: { name: "Hatchery" },
+        TREASURY: { name: "Treasury" },
         BEDROCK: { name: "Bedrock", hasFaces: true, isHigh: true },
         DIRT: { name: "Dirt", hasFaces: true, isHigh: true, minable: true },
         GOLD: { name: "Gold", hasFaces: true, isHigh: true, minable: true }
@@ -277,6 +279,9 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                     break;
                 case TileInterface_1.TILE.HATCHERY:
                     [x, y] = [13 * 8, 0];
+                    break;
+                case TileInterface_1.TILE.TREASURY:
+                    [x, y] = [14 * 8, 0];
                     break;
                 default:
                     [x, y] = [0, 0];
@@ -429,7 +434,231 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
     Tile.id = 0;
     Tile.instances = [];
 });
-define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite"], function (require, exports, Array2D_1, Tile_1, TileInterface_2, Sprite_3) {
+define("Sound", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Sound = void 0;
+    class Sound {
+        constructor(src, count = 1, volume = 1) {
+            this.count = count;
+            this.audioArray = [];
+            for (let n = 0; n < count; n++) {
+                const a = new Audio(src);
+                a.volume = volume;
+                this.audioArray.push(a);
+            }
+        }
+        play(loop = false) {
+            if (!Sound.enabled)
+                return;
+            for (let n = 0; n < this.count; n++) {
+                const inst = this.audioArray[n];
+                if (inst.paused) {
+                    inst.loop = loop;
+                    inst.play();
+                    return inst;
+                }
+            }
+        }
+    }
+    exports.Sound = Sound;
+    Sound.enabled = true;
+});
+define("Mob", ["require", "exports", "Sound", "Tile", "TileInterface", "Map"], function (require, exports, Sound_1, Tile_1, TileInterface_2, Map_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Mob = void 0;
+    const jobs = [];
+    const sfxHit = [
+        new Sound_1.Sound("./data/sfx/hit1.wav", 5),
+        new Sound_1.Sound("./data/sfx/hit2.wav", 5)
+    ];
+    class Mob {
+        constructor(type, x, y) {
+            this.doingJob = false;
+            this.jobProgress = 0;
+            this.brainTick = 0;
+            this.brainMax = 64;
+            this.speed = 1 / 16;
+            this.interface = type;
+            this.hp = type.hp;
+            this.x = x;
+            this.y = y;
+            this.path = [];
+            Mob.instances.push(this);
+        }
+        update(map) {
+            if (this.doingJob) {
+                if (this.path.length > 0) {
+                    const t = this.path[0];
+                    const s = this.speed;
+                    if (t) {
+                        if (this.x != t.x)
+                            this.x += Math.sign(t.x - this.x) * s;
+                        if (this.y != t.y)
+                            this.y += Math.sign(t.y - this.y) * s;
+                        if (this.x === t.x && this.y === t.y) {
+                            this.path.shift();
+                        }
+                    }
+                }
+                else if (this.job) {
+                    if (this.jobProgress++ < 20)
+                        return;
+                    this.jobProgress = 0;
+                    if (this.job.interface.isHigh) {
+                        if (this.job.selected) {
+                            this.job.interface = TileInterface_2.TILE.GROUND;
+                            this.job.selected = false;
+                            this.job.owner = 0;
+                            sfxHit[~~(Math.random() + 1)].play();
+                        }
+                        else {
+                            this.job.interface = TileInterface_2.TILE.WALL;
+                            this.job.owner = 1;
+                            this.job.selected = false;
+                        }
+                    }
+                    else {
+                        const job = this.job;
+                        if (job.partOf !== 0) {
+                            const building = Map_1.Map.buildings.find(e => e.id === job.partOf);
+                            building.owner = 1;
+                            const o = { owner: 1 };
+                            let n = 0;
+                            map.tiles.forEach((t) => {
+                                if (job && t.partOf === job.partOf) {
+                                    t.set(o);
+                                    n++;
+                                }
+                            });
+                        }
+                        else {
+                            const o = { interface: TileInterface_2.TILE.FLOOR, owner: 1 };
+                            job.set(o);
+                        }
+                    }
+                    const tiles = Tile_1.Tile.getNeighbours(this.job);
+                    this.job.selected = false;
+                    tiles.push(this.job);
+                    tiles.forEach(t => {
+                        if (t)
+                            t.sprite = Tile_1.Tile.spriteFromType(t);
+                    });
+                    const i = jobs.indexOf(this.job);
+                    jobs.splice(i, 1);
+                    this.job = null;
+                    this.doingJob = false;
+                }
+            }
+            else {
+                if (!this.path || this.path.length === 0) {
+                    const c = map.get(~~this.x, ~~this.y);
+                    const filtered = [];
+                    map.tiles.forEach((t) => {
+                        if (!t.interface.isHigh && t.owner === 1) {
+                            filtered.push(t);
+                        }
+                    });
+                    const i = ~~(Math.random() * filtered.length);
+                    const t = filtered[i];
+                    if (t) {
+                        this.path = Tile_1.Tile.pathTo(c, t);
+                    }
+                }
+                else {
+                    if (this.path.length > 0) {
+                        const t = this.path[0];
+                        const s = this.speed;
+                        if (t) {
+                            if (this.x != t.x)
+                                this.x += Math.sign(t.x - this.x) * s;
+                            if (this.y != t.y)
+                                this.y += Math.sign(t.y - this.y) * s;
+                            if (this.x === t.x && this.y === t.y) {
+                                this.path.shift();
+                            }
+                        }
+                    }
+                }
+            }
+            if (!this.doingJob && this.interface.canDig) {
+                this.findJob(map);
+            }
+        }
+        draw(ctx) {
+            const i = ~~(performance.now() / 100) % 4;
+            this.interface.sprite.draw(ctx, i, this.x * 8, this.y * 8);
+        }
+        findJob(map) {
+            const tiles = Tile_1.Tile.instances;
+            this.brainTick = this.brainTick % tiles.length;
+            const start = this.brainTick;
+            const max = ~~(Math.random() * this.brainMax);
+            const end = Math.min(this.brainTick + this.brainMax, tiles.length);
+            for (let n = start; n < end; this.brainTick++, n++) {
+                const t = tiles[n];
+                const c = map.get(~~this.x, ~~this.y);
+                if (jobs.includes(t))
+                    continue;
+                if (t.selected) {
+                    if (c) {
+                        const path = Tile_1.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.takeJob(t, path);
+                            break;
+                        }
+                    }
+                }
+                if (t.interface === TileInterface_2.TILE.GROUND) {
+                    const neighbours = Tile_1.Tile.getNeighbours(t);
+                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
+                        const path = Tile_1.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.takeJob(t, path);
+                            break;
+                        }
+                    }
+                }
+                if (t.partOf !== 0 && t.owner !== 1) {
+                    const neighbours = Tile_1.Tile.getNeighbours(t);
+                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
+                        const path = Tile_1.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.takeJob(t, path);
+                            break;
+                        }
+                    }
+                }
+                if (t.interface === TileInterface_2.TILE.DIRT) {
+                    const neighbours = Tile_1.Tile.getNeighbours(t);
+                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
+                        const path = Tile_1.Tile.pathTo(c, t);
+                        if (path !== null) {
+                            this.takeJob(t, path);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        takeJob(t, path) {
+            this.job = t;
+            this.doingJob = true;
+            this.path = path;
+            jobs.push(t);
+        }
+        static updateAll(map) {
+            Mob.instances.forEach(i => i.update(map));
+        }
+        static drawAll(ctx) {
+            Mob.instances.forEach(i => i.draw(ctx));
+        }
+    }
+    exports.Mob = Mob;
+    Mob.instances = [];
+});
+define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite", "Mob", "Creature"], function (require, exports, Array2D_1, Tile_2, TileInterface_3, Sprite_3, Mob_1, Creature_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Map = void 0;
@@ -442,12 +671,15 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite
     const portal = new Sprite_3.Sprite(Sprite_3.spriteSheet, [
         [13 * 8, 11 * 8, 24, 24]
     ]);
+    const heroGate = new Sprite_3.Sprite(Sprite_3.spriteSheet, [
+        [10 * 8, 11 * 8, 24, 24]
+    ]);
     class Map {
         constructor(w, h) {
             this.loading = true;
             this._width = w;
             this._height = h;
-            this.tiles = new Array2D_1.Array2D(w, h, new Tile_1.Tile(TileInterface_2.TILE.NULL, 0, 0));
+            this.tiles = new Array2D_1.Array2D(w, h, new Tile_2.Tile(TileInterface_3.TILE.NULL, 0, 0));
         }
         get width() { return this._width; }
         get height() { return this._height; }
@@ -485,8 +717,8 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite
                         const [r, g, b] = color;
                         switch (true) {
                             default:
-                                const type = Tile_1.Tile.tileFromColor(color);
-                                const tile = new Tile_1.Tile(type, x, y);
+                                const type = Tile_2.Tile.tileFromColor(color);
+                                const tile = new Tile_2.Tile(type, x, y);
                                 this.set(x, y, tile);
                                 break;
                         }
@@ -501,19 +733,28 @@ define("Map", ["require", "exports", "Array2D", "Tile", "TileInterface", "Sprite
                                 out.camX = x;
                                 out.camY = y;
                                 i = Map.getNewBuilding("Dungeon Heart", 1);
-                                this.setArea(x - 2, y - 2, x + 2, y + 2, { interface: TileInterface_2.TILE.FLOOR, owner: 1 });
-                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_2.TILE.NULL, partOf: i, owner: 1 });
-                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_2.TILE.SPECIAL, sprite: dungeonHeart });
+                                this.setArea(x - 2, y - 2, x + 2, y + 2, { interface: TileInterface_3.TILE.TREASURY, owner: 1 });
+                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_3.TILE.NULL, partOf: i, owner: 1 });
+                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_3.TILE.SPECIAL, sprite: dungeonHeart });
+                                new Mob_1.Mob(Creature_1.CREATURE.IMP, x - 2, y - 1);
+                                new Mob_1.Mob(Creature_1.CREATURE.IMP, x - 2, y + 1);
+                                new Mob_1.Mob(Creature_1.CREATURE.IMP, x + 2, y - 1);
+                                new Mob_1.Mob(Creature_1.CREATURE.IMP, x + 2, y + 1);
                                 break;
                             case (r === 0 && g === 0 && b === 255):
                                 i = Map.getNewBuilding("Portal", 0);
-                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_2.TILE.NULL, partOf: i, owner: 0 });
-                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_2.TILE.SPECIAL, sprite: portal });
+                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_3.TILE.NULL, partOf: i, owner: 0 });
+                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_3.TILE.SPECIAL, sprite: portal });
+                                break;
+                            case (r === 255 && g === 0 && b === 255):
+                                i = Map.getNewBuilding("Hero Gate", 0);
+                                this.setArea(x - 1, y - 1, x + 1, y + 1, { interface: TileInterface_3.TILE.NULL, partOf: i, owner: 2 });
+                                this.setArea(x - 1, y - 1, x - 1, y - 1, { interface: TileInterface_3.TILE.SPECIAL, sprite: heroGate });
                                 break;
                         }
                     }
-                Tile_1.Tile.instances.forEach(t => {
-                    t.sprite = Tile_1.Tile.spriteFromType(t);
+                Tile_2.Tile.instances.forEach(t => {
+                    t.sprite = Tile_2.Tile.spriteFromType(t);
                 });
                 callback(out);
             };
@@ -566,231 +807,7 @@ define("Lighting", ["require", "exports"], function (require, exports) {
     }
     exports.lightingUpdate = lightingUpdate;
 });
-define("Sound", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Sound = void 0;
-    class Sound {
-        constructor(src, count = 1, volume = 1) {
-            this.count = count;
-            this.audioArray = [];
-            for (let n = 0; n < count; n++) {
-                const a = new Audio(src);
-                a.volume = volume;
-                this.audioArray.push(a);
-            }
-        }
-        play(loop = false) {
-            if (!Sound.enabled)
-                return;
-            for (let n = 0; n < this.count; n++) {
-                const inst = this.audioArray[n];
-                if (inst.paused) {
-                    inst.loop = loop;
-                    inst.play();
-                    return inst;
-                }
-            }
-        }
-    }
-    exports.Sound = Sound;
-    Sound.enabled = true;
-});
-define("Mob", ["require", "exports", "Sound", "Tile", "TileInterface", "Map"], function (require, exports, Sound_1, Tile_2, TileInterface_3, Map_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Mob = void 0;
-    const jobs = [];
-    const sfxHit = [
-        new Sound_1.Sound("./data/sfx/hit1.wav", 5),
-        new Sound_1.Sound("./data/sfx/hit2.wav", 5)
-    ];
-    class Mob {
-        constructor(type, x, y) {
-            this.doingJob = false;
-            this.jobProgress = 0;
-            this.brainTick = 0;
-            this.brainMax = 64;
-            this.speed = 1 / 16;
-            this.interface = type;
-            this.hp = type.hp;
-            this.x = x;
-            this.y = y;
-            this.path = [];
-            Mob.instances.push(this);
-        }
-        update(map) {
-            if (this.doingJob) {
-                if (this.path.length > 0) {
-                    const t = this.path[0];
-                    const s = this.speed;
-                    if (t) {
-                        if (this.x != t.x)
-                            this.x += Math.sign(t.x - this.x) * s;
-                        if (this.y != t.y)
-                            this.y += Math.sign(t.y - this.y) * s;
-                        if (this.x === t.x && this.y === t.y) {
-                            this.path.shift();
-                        }
-                    }
-                }
-                else if (this.job) {
-                    if (this.jobProgress++ < 20)
-                        return;
-                    this.jobProgress = 0;
-                    if (this.job.interface.isHigh) {
-                        if (this.job.selected) {
-                            this.job.interface = TileInterface_3.TILE.GROUND;
-                            this.job.selected = false;
-                            this.job.owner = 0;
-                            sfxHit[~~(Math.random() + 1)].play();
-                        }
-                        else {
-                            this.job.interface = TileInterface_3.TILE.WALL;
-                            this.job.owner = 1;
-                            this.job.selected = false;
-                        }
-                    }
-                    else {
-                        const job = this.job;
-                        if (job.partOf !== 0) {
-                            const building = Map_1.Map.buildings.find(e => e.id === job.partOf);
-                            building.owner = 1;
-                            const o = { owner: 1 };
-                            let n = 0;
-                            map.tiles.forEach((t) => {
-                                if (job && t.partOf === job.partOf) {
-                                    t.set(o);
-                                    n++;
-                                }
-                            });
-                        }
-                        else {
-                            const o = { interface: TileInterface_3.TILE.FLOOR, owner: 1 };
-                            job.set(o);
-                        }
-                    }
-                    const tiles = Tile_2.Tile.getNeighbours(this.job);
-                    this.job.selected = false;
-                    tiles.push(this.job);
-                    tiles.forEach(t => {
-                        if (t)
-                            t.sprite = Tile_2.Tile.spriteFromType(t);
-                    });
-                    const i = jobs.indexOf(this.job);
-                    jobs.splice(i, 1);
-                    this.job = null;
-                    this.doingJob = false;
-                }
-            }
-            else {
-                if (!this.path || this.path.length === 0) {
-                    const c = map.get(~~this.x, ~~this.y);
-                    const filtered = [];
-                    map.tiles.forEach((t) => {
-                        if (t.interface === TileInterface_3.TILE.FLOOR && t.owner === 1) {
-                            filtered.push(t);
-                        }
-                    });
-                    const i = ~~(Math.random() * filtered.length);
-                    const t = filtered[i];
-                    if (t) {
-                        this.path = Tile_2.Tile.pathTo(c, t);
-                    }
-                }
-                else {
-                    if (this.path.length > 0) {
-                        const t = this.path[0];
-                        const s = this.speed;
-                        if (t) {
-                            if (this.x != t.x)
-                                this.x += Math.sign(t.x - this.x) * s;
-                            if (this.y != t.y)
-                                this.y += Math.sign(t.y - this.y) * s;
-                            if (this.x === t.x && this.y === t.y) {
-                                this.path.shift();
-                            }
-                        }
-                    }
-                }
-            }
-            if (!this.doingJob && this.interface.canDig) {
-                this.findJob(map);
-            }
-        }
-        draw(ctx) {
-            const i = ~~(performance.now() / 100) % 4;
-            this.interface.sprite.draw(ctx, i, this.x * 8, this.y * 8);
-        }
-        findJob(map) {
-            const tiles = Tile_2.Tile.instances;
-            this.brainTick = this.brainTick % tiles.length;
-            const start = this.brainTick;
-            const max = ~~(Math.random() * this.brainMax);
-            const end = Math.min(this.brainTick + this.brainMax, tiles.length);
-            for (let n = start; n < end; this.brainTick++, n++) {
-                const t = tiles[n];
-                const c = map.get(~~this.x, ~~this.y);
-                if (jobs.includes(t))
-                    continue;
-                if (t.selected) {
-                    if (c) {
-                        const path = Tile_2.Tile.pathTo(c, t);
-                        if (path !== null) {
-                            this.takeJob(t, path);
-                            break;
-                        }
-                    }
-                }
-                if (t.interface === TileInterface_3.TILE.GROUND) {
-                    const neighbours = Tile_2.Tile.getNeighbours(t);
-                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
-                        const path = Tile_2.Tile.pathTo(c, t);
-                        if (path !== null) {
-                            this.takeJob(t, path);
-                            break;
-                        }
-                    }
-                }
-                if (t.partOf !== 0 && t.owner !== 1) {
-                    const neighbours = Tile_2.Tile.getNeighbours(t);
-                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
-                        const path = Tile_2.Tile.pathTo(c, t);
-                        if (path !== null) {
-                            this.takeJob(t, path);
-                            break;
-                        }
-                    }
-                }
-                if (t.interface === TileInterface_3.TILE.DIRT) {
-                    const neighbours = Tile_2.Tile.getNeighbours(t);
-                    if (neighbours.some(t => t && !t.interface.isHigh && t.owner === 1)) {
-                        const path = Tile_2.Tile.pathTo(c, t);
-                        if (path !== null) {
-                            this.takeJob(t, path);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        takeJob(t, path) {
-            this.job = t;
-            this.doingJob = true;
-            this.path = path;
-            jobs.push(t);
-        }
-        static updateAll(map) {
-            Mob.instances.forEach(i => i.update(map));
-        }
-        static drawAll(ctx) {
-            Mob.instances.forEach(i => i.draw(ctx));
-        }
-    }
-    exports.Mob = Mob;
-    Mob.instances = [];
-});
-define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite", "Map", "Mob", "Sound", "Lighting", "Creature"], function (require, exports, Input_1, Tile_3, TileInterface_4, Sprite_4, Map_2, Mob_1, Sound_2, Lighting_1, Creature_1) {
+define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite", "Map", "Mob", "Sound", "Lighting", "Creature"], function (require, exports, Input_1, Tile_3, TileInterface_4, Sprite_4, Map_2, Mob_2, Sound_2, Lighting_1, Creature_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     let mX, mY;
@@ -799,10 +816,10 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
     let building = false;
     let buildingType;
     let buildingID = 0;
-    let topText = "";
     let displayText = "";
     let cursorIndex = 1;
     let attractCreatureTimer = 60;
+    let gold = 5000;
     const music = new Sound_2.Sound("./data/music/Sanctuary.mp3", 1, 0.5);
     const musBackground = new Sound_2.Sound("./data/music/ambient.mp3");
     const musAmbient2 = new Sound_2.Sound("./data/music/dungeon_ambient_1.ogg");
@@ -812,20 +829,19 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
         musAmbient2.play(true);
     }, 1000);
     const sfxDig = new Sound_2.Sound("./data/sfx/dig.wav", 10, 0.5);
+    const sprGold = new Sprite_4.Sprite(Sprite_4.spriteSheet, [[11 * 8, 4 * 8, 8, 8]]);
+    const hudGold = new Sprite_4.Sprite(Sprite_4.spriteSheet, [[15 * 8 + 4, 0 * 8, 8, 8]]);
     const icons = [
         new Sprite_4.Sprite(Sprite_4.spriteSheet, [[11 * 8, 2 * 8, 8, 8]]),
         new Sprite_4.Sprite(Sprite_4.spriteSheet, [[0 * 8, 12 * 8, 8, 8]]),
         new Sprite_4.Sprite(Sprite_4.spriteSheet, [[1 * 8, 12 * 8, 8, 8]]),
+        new Sprite_4.Sprite(Sprite_4.spriteSheet, [[2 * 8, 12 * 8, 8, 8]]),
     ];
     const cursor = new Sprite_4.Sprite(Sprite_4.spriteSheet, [
         [7 * 8, 7 * 8, 8, 8],
         [7 * 8, 8 * 8, 8, 8],
         [7 * 8, 9 * 8, 8, 8]
     ]);
-    new Mob_1.Mob(Creature_1.CREATURE.IMP, 30, 27);
-    new Mob_1.Mob(Creature_1.CREATURE.IMP, 30, 31);
-    new Mob_1.Mob(Creature_1.CREATURE.IMP, 34, 27);
-    new Mob_1.Mob(Creature_1.CREATURE.IMP, 34, 31);
     const horny = {
         sprite: new Sprite_4.Sprite(Sprite_4.spriteSheet, [[8 * 8, 6 * 8, 8, 12]]),
         x: 32,
@@ -858,7 +874,7 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
         mX = ~~(Input_1.mouse.x / 10 / 8 + camera.x - 4);
         mY = ~~(Input_1.mouse.y / 10 / 8 + camera.y - 4);
         updateGUI();
-        Mob_1.Mob.updateAll(map);
+        Mob_2.Mob.updateAll(map);
         updateGame();
         drawGame();
         if (!overGUI) {
@@ -867,10 +883,10 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
                 if (tile.partOf) {
                     const building = Map_2.Map.buildings.find(e => e.id === tile.partOf);
                     if (building)
-                        topText = building.name;
+                        displayText = building.name;
                 }
                 else {
-                    topText = tile.interface.name;
+                    displayText = tile.interface.name;
                 }
                 if (Input_1.mouse.pressed[3]) {
                     building = false;
@@ -928,7 +944,7 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
                         lairCount++;
                 });
                 let goblinCount = 0;
-                Mob_1.Mob.instances.forEach(m => {
+                Mob_2.Mob.instances.forEach(m => {
                     if (m.interface.name === "Goblin")
                         goblinCount++;
                 });
@@ -940,7 +956,7 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
                             [x, y] = [t.x, t.y];
                     });
                     console.log("spawn goblin", x, y);
-                    new Mob_1.Mob(Creature_1.CREATURE.GOBLIN, x, y);
+                    new Mob_2.Mob(Creature_2.CREATURE.GOBLIN, x, y);
                 }
             }
         }
@@ -950,7 +966,7 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
             for (let y = Math.max(0, ~~camera.y - 6); y < Math.min(63, ~~camera.y + 5); y++) {
                 map.get(x, y).draw(ctx);
             }
-        Mob_1.Mob.drawAll(ctx);
+        Mob_2.Mob.drawAll(ctx);
         horny.sprite.draw(ctx, 0, horny.x * 8, horny.y * 8);
         Lighting_1.lightingUpdate(map, mX, mY);
         ctx.globalAlpha = 0.9;
@@ -962,11 +978,11 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
     const buttons = [
         "",
         "Lair",
-        "Hatchery"
+        "Hatchery",
+        "Treasury"
     ];
     function updateGUI() {
         overGUI = false;
-        topText = "";
         displayText = "";
         cursorIndex = building ? 2 : 1;
         const mx = ~~(Input_1.mouse.x / 10);
@@ -986,6 +1002,9 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
                         case "Hatchery":
                             setBuildTemplate(TileInterface_4.TILE.HATCHERY);
                             break;
+                        case "Treasury":
+                            setBuildTemplate(TileInterface_4.TILE.TREASURY);
+                            break;
                     }
                 }
             }
@@ -996,24 +1015,24 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
             const i = icons[n] === undefined ? 0 : n;
             icons[i].draw(ctx, 0, 1 + n * 9, 55);
         }
+        hudGold.draw(ctx, 0, 1, 1);
+        drawText(gold.toString(), 6, 5, 0);
         ctx.fillStyle = "#ffc700";
         ctx.font = "4px Ikkle4";
         if (displayText)
             drawText(displayText, 32, 54);
-        if (topText)
-            drawText(topText, 32, 5);
     }
     function setBuildTemplate(type) {
         building = true;
         buildingType = type;
     }
-    function drawText(t, x, y) {
+    function drawText(t, x, y, align = 1) {
         const words = t.split(" ");
         let length = (words.length - 1) * 4;
         words.forEach(w => {
             length += ctx.measureText(w).width;
         });
-        let dx = x - (~~(length / 2));
+        let dx = align ? x - (~~(length / 2)) : x;
         words.forEach(w => {
             ctx.fillText(w, dx, y);
             dx += ctx.measureText(w).width + 4;
@@ -1030,6 +1049,14 @@ define("index", ["require", "exports", "Input", "Tile", "TileInterface", "Sprite
             camera.y += speed;
         if (down['d'] || down['D'] || down['ArrowRight'])
             camera.x += speed;
+        if (camera.x < 0)
+            camera.x = 0;
+        if (camera.x > 32)
+            camera.x = 32;
+        if (camera.y < 0)
+            camera.y = 0;
+        if (camera.y > 32)
+            camera.y = 32;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.save();
         const cx = Math.round(-camera.x * 8);

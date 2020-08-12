@@ -122,11 +122,12 @@ export class Mob {
 
 		// idle
 		else {
+
 			if (!this.path || this.path.length === 0) {
 				const c = map.get(~~this.x, ~~this.y);		// current tile
 				const filtered: Array<Tile> = [];
 				map.tiles.forEach((t:Tile) => {
-					if (t.interface === TILE.FLOOR && t.owner === 1) {
+					if (!t.interface.isHigh && t.owner === 1) {
 						filtered.push(t);
 					}
 				});
@@ -137,8 +138,6 @@ export class Mob {
 					//console.log(this.path);
 				}
 			} else {
-
-				// follow path to job
 				if (this.path.length > 0) {
 					const t = this.path[0];		// tile
 					const s = this.speed;		// speed
