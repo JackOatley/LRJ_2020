@@ -84,7 +84,6 @@ export class Tile {
 			case TILE.LAIR: [x, y] = [12*8, 0]; break;
 			case TILE.HATCHERY: [x, y] = [13*8, 0]; break;
 			case TILE.TREASURY: [x, y] = [14*8, 0]; break;
-			default: [x, y] = [0, 0]; break;
 		}
 
 		let [u, d, l, r] = [false, false, false, false];

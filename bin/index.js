@@ -283,9 +283,6 @@ define("Tile", ["require", "exports", "Sprite", "TileInterface"], function (requ
                 case TileInterface_1.TILE.TREASURY:
                     [x, y] = [14 * 8, 0];
                     break;
-                default:
-                    [x, y] = [0, 0];
-                    break;
             }
             let [u, d, l, r] = [false, false, false, false];
             let [dl, dr, ul, ur] = [false, false, false, false];
